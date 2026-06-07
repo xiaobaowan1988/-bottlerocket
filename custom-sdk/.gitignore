@@ -1,0 +1,4 @@
+# Pre-downloaded Rust components (large binary files)
+rust-std-aarch64.tar.xz
+rust-src.tar.xz
+ca-certificates.crt

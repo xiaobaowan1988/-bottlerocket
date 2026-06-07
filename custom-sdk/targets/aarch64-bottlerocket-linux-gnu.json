@@ -1,0 +1,22 @@
+{
+  "arch": "aarch64",
+  "crt-objects-fallback": "false",
+  "data-layout": "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128",
+  "dynamic-linking": true,
+  "env": "gnu",
+  "features": "+v8a,+outline-atomics",
+  "has-rpath": true,
+  "llvm-target": "aarch64-unknown-linux-gnu",
+  "max-atomic-width": 128,
+  "os": "linux",
+  "position-independent-executables": true,
+  "pre-link-args": {
+    "gcc": ["-Wl,--as-needed", "-Wl,-z,relro,--as-needed", "-Wl,-z,now"]
+  },
+  "relro-level": "full",
+  "stack-probes": {"kind": "inline"},
+  "supported-sanitizers": ["address", "leak", "memory", "thread"],
+  "target-family": ["unix"],
+  "target-pointer-width": "64",
+  "vendor": "bottlerocket"
+}

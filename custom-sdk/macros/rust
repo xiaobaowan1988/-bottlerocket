@@ -1,0 +1,39 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT
+#
+# Originally derived from https://github.com/amazonlinux/rust-bundled-packaging
+# which is in turn derived from https://pagure.io/fedora-rust/rust2rpm
+# Copyright (c) 2017 Igor Gnatenko
+
+%__rustc %{_bindir}/rustc
+%__rustdoc %{_bindir}/rustdoc
+
+# Enable some optimization, debuginfo, and link hardening.
+%__global_rustflags_base %{shrink: \
+  -Copt-level=3 -Cdebuginfo=line-tables-only -Cforce-frame-pointers=yes \
+  %{_cross_arch_rust_flags} \
+  -Clink-arg=-Wl,-z,relro,-z,now \
+  -Clink-arg=-Wl,-z,pack-relative-relocs \
+  %{nil}}
+
+# Optimize generated code by using one codegen unit
+%__global_rustflags -Ccodegen-units=1 %__global_rustflags_base
+
+# Pessimize AWS SDK binaries in favor of faster builds
+%__global_rustflags_aws_sdk -Cprefer-dynamic %__global_rustflags_base
+
+# Enable dynamic linking.
+%__global_rustflags_shared -Cprefer-dynamic %__global_rustflags
+
+# Enable LTO and static C runtime.
+%__global_rustflags_static -Clto=thin -Cembed-bitcode=yes -Ctarget-feature=+crt-static -Clink-arg=-lgcc %__global_rustflags
+
+%__global_rustflags_shared_toml [%{lua:
+    for arg in string.gmatch(rpm.expand("%{__global_rustflags_shared}"), "%S+") do
+        print('"' .. arg .. '", ')
+    end}]
+
+%__global_rustflags_static_toml [%{lua:
+    for arg in string.gmatch(rpm.expand("%{__global_rustflags_static}"), "%S+") do
+        print('"' .. arg .. '", ')
+    end}]

@@ -1,0 +1,91 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT
+#
+# Originally derived from https://github.com/amazonlinux/rust-bundled-packaging
+# which is in turn derived from https://pagure.io/fedora-rust/rust2rpm
+# Copyright (c) 2017 Igor Gnatenko
+
+# Changes for Bottlerocket:
+# - Remove _cargometadir, no automatic bundled() provides
+# - Remove local registry generation
+
+%__cargo %{_bindir}/cargo
+%__cargo_common_opts --offline --locked --verbose
+%__cargo_target %{_cross_triple}-gnu
+%__cargo_target_static %{_cross_triple}-musl
+%__cargo_cross_opts %{__cargo_common_opts} --target %{__cargo_target}
+%__cargo_cross_opts_static %{__cargo_common_opts} --target %{__cargo_target_static}
+%__cargo_env CARGO_TARGET_DIR="${HOME}/.cache" SKIP_README="true"
+%__cargo_env_fips CARGO_TARGET_DIR="${HOME}/.cache/.fips" SKIP_README="true"
+%__cargo_env_aws_sdk CARGO_TARGET_DIR="${HOME}/.cache/.aws-sdk" SKIP_README="true" RUSTFLAGS="%{__global_rustflags_aws_sdk}"
+%__cargo_env_fips_aws_sdk CARGO_TARGET_DIR="${HOME}/.cache/.fips/.aws-sdk" SKIP_README="true" RUSTFLAGS="%{__global_rustflags_aws_sdk}"
+%__cargo_env_static CARGO_TARGET_DIR="${HOME}/.cache/.static" SKIP_README="true"
+%__cargo_env_static_fips CARGO_TARGET_DIR="${HOME}/.cache/.fips/.static" SKIP_README="true"
+%__cargo_outdir "${HOME}/.cache/%{__cargo_target}/release"
+%__cargo_outdir_fips "${HOME}/.cache/.fips/%{__cargo_target}/release"
+%__cargo_outdir_aws_sdk "${HOME}/.cache/.aws-sdk/%{__cargo_target}/release"
+%__cargo_outdir_aws_sdk_fips "${HOME}/.cache/.fips/.aws-sdk/%{__cargo_target}/release"
+%__cargo_outdir_static "${HOME}/.cache/.static/%{__cargo_target_static}/release"
+%__cargo_outdir_static_fips "${HOME}/.cache/.fips/.static/%{__cargo_target_static}/release"
+%__cargo_cross_pkg_config PKG_CONFIG_PATH="%{_cross_pkgconfigdir}" PKG_CONFIG_ALLOW_CROSS=1
+
+%__cargo_cross_env_base \
+  CMAKE_TOOLCHAIN_FILE="%{_cross_cmake_toolchain_conf}" ; \
+  export CMAKE_TOOLCHAIN_FILE ; \
+  BINDGEN_EXTRA_CLANG_ARGS="--target=%{_cross_target} --sysroot=%{_cross_rootdir}" ; \
+  export BINDGEN_EXTRA_CLANG_ARGS ; \
+  %{__cargo_cross_pkg_config}
+
+%__cargo_cross_env_static_base \
+  CMAKE_TOOLCHAIN_FILE="%{_cross_cmake_toolchain_conf_static}" ; \
+  export CMAKE_TOOLCHAIN_FILE ; \
+  BINDGEN_EXTRA_CLANG_ARGS="--target=%{_cross_triple}-musl --sysroot=/%{_cross_triple}-musl/sys-root" ; \
+  export BINDGEN_EXTRA_CLANG_ARGS ; \
+  %{__cargo_cross_pkg_config}
+
+%__cargo_cross_env %{__cargo_cross_env_base} %{__cargo_env} TARGET_CC="%{_cross_triple}-gnu-gcc"
+%__cargo_cross_env_aws_sdk %{__cargo_cross_env_base} %{__cargo_env_aws_sdk} TARGET_CC="%{_cross_triple}-gnu-gcc"
+%__cargo_cross_env_fips %{__cargo_cross_env_base} %{__cargo_env_fips} TARGET_CC="%{_cross_triple}-gnu-gcc"
+%__cargo_cross_env_fips_aws_sdk %{__cargo_cross_env_base} %{__cargo_env_fips_aws_sdk} TARGET_CC="%{_cross_triple}-gnu-gcc"
+%__cargo_cross_env_static %{__cargo_cross_env_static_base} %{__cargo_env_static} TARGET_CC="%{_cross_triple}-musl-gcc"
+%__cargo_cross_env_static_fips %{__cargo_cross_env_static_base} %{__cargo_env_static_fips} TARGET_CC="%{_cross_triple}-musl-gcc"
+
+%__cargo_incremental false
+
+# GCC and LLVM formats for LTO are not compatible, so disable LTO for builds
+# that use the C/C++ toolchains via `cmake`.
+%cargo_prep (\
+%write_cross_cmake_toolchain_conf \
+%write_cross_cmake_toolchain_conf_static \
+%{shrink: \
+sed -i \
+  -e "s/-flto=auto//g" \
+  -e "s/-ffat-lto-objects//g" \
+  %_cross_cmake_toolchain_conf \
+  %_cross_cmake_toolchain_conf_static \
+%{nil}} \
+%{__mkdir} -p %{_builddir}/.cargo \
+cat > %{_builddir}/.cargo/config.toml << EOF \
+[build]\
+rustc = "%{__rustc}"\
+rustdoc = "%{__rustdoc}"\
+incremental = %{__cargo_incremental}\
+\
+[target.%{_cross_triple}-gnu]\
+linker = "%{_bindir}/%{_cross_triple}-gnu-gcc"\
+ar = "%{_bindir}/%{_cross_triple}-gnu-gcc-ar"\
+rustflags = %{__global_rustflags_shared_toml}\
+\
+[target.%{_cross_triple}-musl]\
+linker = "%{_bindir}/%{_cross_triple}-musl-gcc"\
+ar = "%{_bindir}/%{_cross_triple}-musl-gcc-ar"\
+rustflags = %{__global_rustflags_static_toml}\
+EOF\
+)
+
+%cargo_build %{__cargo_cross_env} %{__cargo} build %{__cargo_cross_opts} --release %{?cargo_args}
+%cargo_build_aws_sdk %{__cargo_cross_env_aws_sdk} %{__cargo} build %{__cargo_cross_opts} --release %{?cargo_args}
+%cargo_build_fips %{__cargo_cross_env_fips} %{__cargo} build %{__cargo_cross_opts} --release --features fips %{?cargo_args}
+%cargo_build_fips_aws_sdk %{__cargo_cross_env_fips_aws_sdk} %{__cargo} build %{__cargo_cross_opts} --release --features fips %{?cargo_args}
+%cargo_build_static %{__cargo_cross_env_static} %{__cargo} build %{__cargo_cross_opts_static} --release %{?cargo_args}
+%cargo_build_static_fips %{__cargo_cross_env_static_fips} %{__cargo} build %{__cargo_cross_opts_static} --release --features fips %{?cargo_args}
